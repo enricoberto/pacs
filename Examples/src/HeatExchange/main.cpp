@@ -103,7 +103,7 @@ int main(int argc, char** argv)
 
 	u.insert(u.begin(), theta[0]);
 
-
+	A.set_gamma();
 	
   // Gauss-Seidel
   // epsilon=||x^{k+1}-x^{k}||

@@ -33,12 +33,12 @@ matrid operator* (const matrid A, const double k){
  }
 */
 void matrid::scalar(const double k){
-	for (unsigned int i = 0; i < this->get_size()-1; ++i){
+	for (unsigned int i = 0; i < N-1; ++i){
 		this->mod_a()[i] *=k;
 		this->mod_b()[i] *=k;
 		this->mod_c()[i] *=k;
 	}	
-		this->mod_b()[this->get_size()-1] *=k;
+		this->mod_b()[N-1] *=k;
 }
 /*
  matrid& operator=(matrid &rhs){
@@ -57,33 +57,48 @@ void matrid::scalar(const double k){
  }
 */
 
+ void matrid::set_gamma(){
+     // creo vettori aT bT cT per uniformarmi alla notazione del
+	 // Quarteroni-Sacco
 
+	 std::vector<double>  bT = a;
+	 std::vector<double>  aT = b;
+	 std::vector<double>  cT = c;
+	 
+	 bT.insert(bT.begin(), 0);
+	 cT.push_back(0);
+	 
+	 gamma[0]=1/aT[0];
+	for (unsigned int i = 1; i < N; ++i) {
+		gamma[i]=1/(aT[i]-bT[i]*gamma[i-1]*cT[i-1]);
+	} 
+	gamma_set=true;
+ }
 
- void matrid::thomas_algorithm(const std::vector<double>& f,  
-	 std::vector<double>& x){
-
-	 std::vector<double>  b = this->get_a();
-	 std::vector<double>  a = this->get_b();
-	 std::vector<double>  c = this->get_c();
+ void matrid::thomas_algorithm(const std::vector<double>& f,   std::vector<double>& x){
+     // creo vettori aT bT cT per uniformarmi alla notazione del
+	 // Quarteroni-Sacco
+	 std::vector<double>  bT = a;
+	 std::vector<double>  aT = b;
+	 std::vector<double>  cT = c;
 	 size_t n = f.size();
 	
-	 std::vector<double>  gamma(n, 0);
+	 std::vector<double>  gammaT(n, 0);
 	 std::vector<double>  y(n, 0);
-
-	 b.insert(b.begin(), 0);
-	 c.push_back(0);
-
-	 gamma[0]=1/a[0];
-	for (unsigned int i = 1; i < n; ++i) {
-		gamma[i]=1/(a[i]-b[i]*gamma[i-1]*c[i-1]);		
-	} 
+    
+	 bT.insert(bT.begin(), 0);
+	 cT.push_back(0);
+	
+	//set gamma
+	if(!gamma_set) this->set_gamma();
 	y[0]=gamma[0]*f[0];
+	
 	for (unsigned int i = 1; i < n; ++i) {
-		y[i]=gamma[i]*(f[i]-b[i]*y[i-1]);		
+		y[i]=gamma[i]*(f[i]-bT[i]*y[i-1]);		
 	} 
 	x[n-1]=y[n-1];
 	for (unsigned int i = n-1; i-- >0;) {
-		x[i]=y[i]-gamma[i]*c[i]*x[i+1];
+		x[i]=y[i]-gamma[i]*cT[i]*x[i+1];
 	}
 
  }
