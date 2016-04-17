@@ -5,6 +5,9 @@
 #include "readParameters.hpp"
 #include "GetPot.hpp"
 #include "gnuplot-iostream.hpp"// interface with gnuplot
+#include "norm.hpp"
+#include "matrid.hpp"
+
 /*!
   @file main.cpp
   @brief Temperature distribution in a 1D bar.
@@ -30,10 +33,11 @@ void printHelp()
   std::cout<<"-v verbose output"<<std::endl;
 }
 
+using namespace std; // avoid std::
+
 //! main program
 int main(int argc, char** argv)
 {
-  using namespace std; // avoid std::
   int status(0); // final program status
   GetPot   cl(argc, argv);
   if( cl.search(2, "-h", "--help") )
@@ -61,7 +65,12 @@ int main(int argc, char** argv)
   const auto& Te=param.Te; // External temperature (Centigrades)
   const auto& k=param.k;  // Thermal conductivity
   const auto& hc=param.hc; // Convection coefficient
-  const auto&    M=param.M; // Number of grid elements
+  const auto& M=param.M; // Number of grid elements
+  const auto& name_out=param.n_o;
+  const auto& mode=param.m; // Mode
+  const auto& criterion=param.cr; // Criterion
+  const auto& dt=param.dt; // Delta t
+  const auto& iter_t=param.itt; // Iter tempo
   
   //! Precomputed coefficient for adimensional form of equation
   const auto act=2.*(a1+a2)*hc*L*L/(k*a1*a2);
@@ -71,17 +80,36 @@ int main(int argc, char** argv)
   
   // Solution vector
   std::vector<double> theta(M+1);
+  std::vector<double> v(M+1);
   
   // Gauss Siedel is initialised with a linear variation
   // of T
   
   for(unsigned int m=0;m <= M;++m)
      theta[m]=(1.-m*h)*(To-Te)/Te;
-  
+ 
+  // Thomas
+  // Inserisco la soluzione nella quarta colonna dei risultati.
+	vector<double> diagi(M-1,-1);
+	vector<double> diag(M, (2+h*h*act));
+	vector<double> diags(M-1, -1);
+	diag[M-1]=1;
+	vector<double> b(M, 0);
+	vector<double> u(M, 0);
+	b[0]= theta[0];
+
+	matrid A(diagi, diag, diags);
+	A.thomas_algorithm(b, u);
+
+	u.insert(u.begin(), theta[0]);
+
+
+	
   // Gauss-Seidel
   // epsilon=||x^{k+1}-x^{k}||
   // Stopping criteria epsilon<=toler
   
+	cout << "Il criterio di arresto e' "; 
   int iter=0;
   double xnew, epsilon;
      do
@@ -91,16 +119,41 @@ int main(int argc, char** argv)
          for(int m=1;m < M;m++)
          {   
 	   xnew  = (theta[m-1]+theta[m+1])/(2.+h*h*act);
-	   epsilon += (xnew-theta[m])*(xnew-theta[m]);
+	   v[m] = xnew - theta[m];
+	   //epsilon += (xnew-theta[m])*(xnew-theta[m]);
 	   theta[m] = xnew;
          }
 
 	 //Last row
-	 xnew = theta[M-1]; 
-	 epsilon += (xnew-theta[M])*(xnew-theta[M]);
+	 xnew = theta[M-1];
+	 v[M] = xnew - theta[M];
+	 //epsilon += (xnew-theta[M])*(xnew-theta[M]);
 	 theta[M]=  xnew; 
 
-	 iter=iter+1;     
+	 iter=iter+1;    
+
+ 	 // compute norms
+	switch(criterion){
+		case 1:
+			if(iter==1) cout << "Rn norm" << endl;
+			for (unsigned int m = 1; m <=M; ++m) {
+				epsilon += v[m]*v[m];
+			}
+			break;
+		case 2:
+			if(iter==1) cout << "L2 norm" << endl;
+			epsilon = norm_L2(v, h);
+			epsilon = norm_L2(v, h);
+			break;
+		case 3:
+			if(iter==1) cout << "H1 norm" << endl;
+			epsilon = norm_H1(v, h);
+			break;
+		default:
+			if(iter==1) cout << "The criterion is wrong" << endl;
+	 
+	 }
+
        }while((sqrt(epsilon) > toler) && (iter < itermax) );
 
     if(iter<itermax)
@@ -118,29 +171,70 @@ int main(int argc, char** argv)
      for(int m=0;m <= M;m++)
        thetaa[m]=Te+(To-Te)*cosh(sqrt(act)*(1-m*h))/cosh(sqrt(act));
 
-     // writing results with format
-     // x_i u_h(x_i) u(x_i) and lauch gnuplot 
 
-     Gnuplot gp;
+	//TIME EVOLUTION
+	
+	// (I + dt*A) theta n+1 = b*dt + theta n
+	// inizializzazione matrice A in cui aggiugo una prima linea con 1 in pos 0
+	// per imporre la condizione al bordo
+	vector<double> diagTi(M,-1);
+	vector<double> diagT(M+1, (2+h*h*act));
+	vector<double> diagTs(M, -1);
+	diagT[M]=1;
+	diagTi[0]=0;
+	diagT[0]=1;
+	diagTs[0]=0;
+
+	matrid AT(diagTi, diagT, diagTs);
+
+
+	// inizializzazione termine noto e vettore soluzioni
+	vector<double> bT(M+1, 0);
+	bT[0]= theta[0]; //b=b*dt
+	bT[1]= theta[0]; //b=b*dt
+
+	vector<double> theta_n(M+1, (To-Te)/Te); //cond iniziale: temp esterna
+	vector<double> theta_n1(M+1, 0);
+
+	AT.time_evolution(theta_n, theta_n1,bT, dt, iter_t);
+
+	//PLOT
+
+     // writing results with format
+     // x_i u_h(x_i) u(x_i) uthomas(x_i) u_time(x_i) and lauch gnuplot 
+
+   Gnuplot gp;
      std::vector<double> coor(M+1);
      std::vector<double> sol(M+1);
      std::vector<double> exact(M+1);
+     std::vector<double> thomas(M+1);
+     std::vector<double> time(M+1);
+	if(mode==0 || mode==2){
+		 const char *name_punt = name_out.c_str();
 
-     cout<<"Result file: result.dat"<<endl;
-     ofstream f("result.dat");
-     for(int m = 0; m<= M; m++)
-       {
+		cout<<"Result file: " << name_punt <<endl;
+		ofstream f(name_punt);
+    
+	   	for(int m = 0; m<= M; m++)
+		 {
 	 // \t writes a tab 
-         f<<m*h*L<<"\t"<<Te*(1.+theta[m])<<"\t"<<thetaa[m]<<endl;
+		    f<<m*h*L<<"\t"<<Te*(1.+theta[m])<<"\t"<<thetaa[m]<<"\t"<<Te*(1+ u[m]) <<"\t"<<Te*(1+ theta_n1[m]) <<endl;
+		 }
+    f.close();
+	}
+     // Using temporary files (another nice use of tie)
+    if(mode==1 || mode==2){
+	   	for(int m = 0; m<= M; m++){
 	 // An example of use of tie and tuples!
          
-	 std::tie(coor[m],sol[m],exact[m])=
-	   std::make_tuple(m*h*L,Te*(1.+theta[m]),thetaa[m]);
-       }
-     // Using temporary files (another nice use of tie)
-     gp<<"plot"<<gp.file1d(std::tie(coor,sol))<<
+			std::tie(coor[m],sol[m],exact[m],thomas[m],time[m])=
+			std::make_tuple(m*h*L,Te*(1.+theta[m]),thetaa[m],Te*(1.+ u[m]),Te*(1.+ theta_n1[m]));
+		}
+		gp<<"plot"<<gp.file1d(std::tie(coor,sol))<<
        "w lp title 'uh',"<< gp.file1d(std::tie(coor,exact))<<
-       "w l title 'uex'"<<std::endl;
-     f.close();
+       "w l title 'uex',"<< gp.file1d(std::tie(coor,thomas))<<
+       "w l title 'uthom'," << gp.file1d(std::tie(coor,time))<<
+       "w l title 'u after T seconds'" <<std::endl;
+	}
      return status;
 }

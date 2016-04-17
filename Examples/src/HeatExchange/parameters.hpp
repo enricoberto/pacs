@@ -1,6 +1,8 @@
 #ifndef HH_Parameters_HH
 #define HH_Parameters_HH
 #include <iosfwd>
+#include <string>
+
 struct parameters
 {
   //! max number of iteration for Gauss-Siedel
@@ -23,7 +25,18 @@ struct parameters
   double hc;
   //! Number of elements
   int M;
+  //! Name output
+  std::string n_o;
+  //! modo
+  int m;
+  //! Criterion
+  int cr;
+  //! Delta t
+  double dt;
+  //! N iterazioni tempo
+  int itt;
   //! Constructor takes default values
+
   parameters():
     itermax(1000000),
     toler(1e-8),
@@ -34,8 +47,13 @@ struct parameters
     Te(20.),
     k(0.164),
     hc(1.e-6*200.),
-    M(100)
-  {}
+    M(100),
+	n_o("output_data.dat"),
+	m(2),
+	cr(2),
+	dt(0.01),
+	itt(100)
+	{}
 };
 //! Prints parameters
 std::ostream & operator << (std::ostream &,const parameters &);

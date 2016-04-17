@@ -21,12 +21,8 @@ hc=200.0e-6
 # Number of elements
 M=11
 # Name file output
-n_o=pippo.dat
-# Mode: 0= mat, 1=screen, 2=both
-m=2
-# Criterion: 1 = norm Rn, 2 = norm L2, 3 = norm H1
-cr=2
-# Delta t
-dt=0.01
-# Time iterations
-itt=100
+n_o=results_norml2.dat
+# Mode
+m=0
+# Criterion
+cr=3
